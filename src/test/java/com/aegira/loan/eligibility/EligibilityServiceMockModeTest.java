@@ -16,18 +16,27 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 class EligibilityServiceMockModeTest {
     @Test
-    void checkRulesUsingMockMode() {
+    void shouldPassAllEligibilityRulesWhenUsingMockData() {
+        // Arrange: gunakan provider mock sungguhan karena data mock-nya yang ingin dites.
         MockLoanDataProvider mockProvider = new MockLoanDataProvider();
         LoanDataSourceProperties properties = new LoanDataSourceProperties();
         properties.setMode(DataSourceMode.MOCK);
+
+        // Database provider dan repository tidak dipakai pada MOCK mode, jadi cukup dibuat mock.
         LoanDataProviderResolver resolver = new LoanDataProviderResolver(
-                properties, mock(DatabaseLoanDataProvider.class), mockProvider);
-        EligibilityService service = new EligibilityService(mock(EligibilityResultRepository.class), resolver);
+                properties,
+                mock(DatabaseLoanDataProvider.class),
+                mockProvider
+        );
+        EligibilityResultRepository repository = mock(EligibilityResultRepository.class);
+        EligibilityService service = new EligibilityService(repository, resolver);
+
         UUID customerId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         LoanApplication application = new LoanApplication();
@@ -39,8 +48,11 @@ class EligibilityServiceMockModeTest {
         LoanCalculation calculation = new LoanCalculation();
         calculation.setProjectedDsr(new BigDecimal("38.7500"));
 
+        // Act
         List<EligibilityResult> results = service.evaluate(application, calculation);
 
+        // Assert: terdapat tujuh rule dan semua rule lulus untuk data mock.
+        assertEquals(7, results.size());
         assertTrue(results.stream().allMatch(EligibilityResult::getPassed));
     }
 }

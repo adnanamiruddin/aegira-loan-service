@@ -1,6 +1,7 @@
 package com.aegira.loan.approval;
 
 import com.aegira.loan.approval.dto.ApprovalRequest;
+import com.aegira.loan.approval.entity.ApprovalDecision;
 import com.aegira.loan.approval.entity.ApprovalHistory;
 import com.aegira.loan.approval.repository.ApprovalHistoryRepository;
 import com.aegira.loan.approval.service.ApprovalService;
@@ -8,7 +9,6 @@ import com.aegira.loan.audit.service.AuditService;
 import com.aegira.loan.common.exception.BadRequestException;
 import com.aegira.loan.common.security.SecurityUtil;
 import com.aegira.loan.customer.entity.Customer;
-import com.aegira.loan.loanapplication.dto.LoanApplicationResponse;
 import com.aegira.loan.loanapplication.entity.ApplicationStatus;
 import com.aegira.loan.loanapplication.entity.LoanApplication;
 import com.aegira.loan.loanapplication.service.LoanApplicationService;
@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,93 +34,149 @@ class ApprovalServiceTest {
     private ApprovalHistoryRepository approvalHistoryRepository;
     private AuditService auditService;
     private SecurityUtil securityUtil;
-    private ApprovalService service;
+    private ApprovalService approvalService;
+    private User riskUser;
 
     @BeforeEach
     void setUp() {
+        // Buat mock untuk semua dependency ApprovalService.
         loanApplicationService = mock(LoanApplicationService.class);
         approvalHistoryRepository = mock(ApprovalHistoryRepository.class);
         auditService = mock(AuditService.class);
         securityUtil = mock(SecurityUtil.class);
-        service = new ApprovalService(loanApplicationService, approvalHistoryRepository, auditService, securityUtil);
-        User user = new User();
-        user.setId(UUID.randomUUID());
-        user.setRole(Role.RISK);
-        when(securityUtil.currentUser()).thenReturn(user);
-        when(loanApplicationService.toResponse(any(LoanApplication.class))).thenAnswer(invocation -> {
-            LoanApplication app = invocation.getArgument(0);
-            return LoanApplicationResponse.builder().id(app.getId()).status(app.getStatus()).build();
-        });
+        approvalService = new ApprovalService(
+                loanApplicationService,
+                approvalHistoryRepository,
+                auditService,
+                securityUtil
+        );
+
+        riskUser = new User();
+        riskUser.setId(UUID.randomUUID());
+        riskUser.setRole(Role.RISK);
+        when(securityUtil.currentUser()).thenReturn(riskUser);
     }
 
     @Test
-    void riskApproveValidStatus() {
-        LoanApplication application = application(ApplicationStatus.WAITING_RISK_REVIEW);
+    void riskApprove_shouldApproveWhenAmountIsAtThreshold() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        ApprovalRequest request = approvalRequest(new BigDecimal("50000000.00"), null);
         when(loanApplicationService.get(application.getId())).thenReturn(application);
-        ApprovalRequest request = new ApprovalRequest();
-        request.setApprovedAmount(new BigDecimal("50000000.00"));
-        assertEquals(ApplicationStatus.HO_APPROVED, service.riskApprove(application.getId(), request).getStatus());
-    }
 
-    @Test
-    void riskRejectValidStatus() {
-        LoanApplication application = application(ApplicationStatus.WAITING_RISK_REVIEW);
-        when(loanApplicationService.get(application.getId())).thenReturn(application);
-        ApprovalRequest request = new ApprovalRequest();
-        request.setNotes("Not eligible");
-        assertEquals(ApplicationStatus.RISK_REJECTED, service.riskReject(application.getId(), request).getStatus());
-    }
+        // Act
+        approvalService.riskApprove(application.getId(), request);
 
-    @Test
-    void riskCannotApproveDraft() {
-        LoanApplication application = application(ApplicationStatus.DRAFT);
-        when(loanApplicationService.get(application.getId())).thenReturn(application);
-        assertThrows(BadRequestException.class, () -> service.riskApprove(application.getId(), new ApprovalRequest()));
-    }
-
-    @Test
-    void hoApproveValidStatus() {
-        LoanApplication application = application(ApplicationStatus.WAITING_HO_APPROVAL);
-        when(loanApplicationService.get(application.getId())).thenReturn(application);
-        assertEquals(ApplicationStatus.HO_APPROVED, service.hoApprove(application.getId(), new ApprovalRequest()).getStatus());
-    }
-
-    @Test
-    void hoCannotApproveWaitingRiskReview() {
-        LoanApplication application = application(ApplicationStatus.WAITING_RISK_REVIEW);
-        when(loanApplicationService.get(application.getId())).thenReturn(application);
-        assertThrows(BadRequestException.class, () -> service.hoApprove(application.getId(), new ApprovalRequest()));
-    }
-
-    @Test
-    void approvalCreatesApprovalHistory() {
-        LoanApplication application = application(ApplicationStatus.WAITING_RISK_REVIEW);
-        when(loanApplicationService.get(application.getId())).thenReturn(application);
-        service.riskApprove(application.getId(), new ApprovalRequest());
+        // Assert
+        assertEquals(ApplicationStatus.HO_APPROVED, application.getStatus());
         verify(approvalHistoryRepository).save(any(ApprovalHistory.class));
-    }
-
-    @Test
-    void approvalCreatesAuditLog() {
-        LoanApplication application = application(ApplicationStatus.WAITING_RISK_REVIEW);
-        when(loanApplicationService.get(application.getId())).thenReturn(application);
-        service.riskApprove(application.getId(), new ApprovalRequest());
         verify(auditService).log(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void approvalHistoryUsesCorrelationId() {
-        LoanApplication application = application(ApplicationStatus.WAITING_RISK_REVIEW);
+    void riskApprove_shouldWaitForHoWhenAmountIsAboveThreshold() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        ApprovalRequest request = approvalRequest(new BigDecimal("50000000.01"), null);
         when(loanApplicationService.get(application.getId())).thenReturn(application);
-        service.riskApprove(application.getId(), new ApprovalRequest());
+
+        // Act
+        approvalService.riskApprove(application.getId(), request);
+
+        // Assert
+        assertEquals(ApplicationStatus.WAITING_HO_APPROVAL, application.getStatus());
+    }
+
+    @Test
+    void riskApprove_shouldUseRequestedAmountWhenApprovedAmountIsEmpty() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        when(loanApplicationService.get(application.getId())).thenReturn(application);
+
+        // Act
+        approvalService.riskApprove(application.getId(), approvalRequest(null, null));
+
+        // Assert
+        ArgumentCaptor<ApprovalHistory> captor = ArgumentCaptor.forClass(ApprovalHistory.class);
+        verify(approvalHistoryRepository).save(captor.capture());
+        assertEquals(application.getRequestedAmount(), captor.getValue().getApprovedAmount());
+    }
+
+    @Test
+    void riskApprove_shouldThrowErrorWhenApplicationIsNotWaitingForRisk() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.DRAFT);
+        when(loanApplicationService.get(application.getId())).thenReturn(application);
+
+        // Act and Assert
+        assertThrows(BadRequestException.class,
+                () -> approvalService.riskApprove(application.getId(), approvalRequest(null, null)));
+        verify(approvalHistoryRepository, never()).save(any(ApprovalHistory.class));
+        verify(auditService, never()).log(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void riskReject_shouldRejectAndSaveNotes() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        ApprovalRequest request = approvalRequest(null, "Document is incomplete");
+        when(loanApplicationService.get(application.getId())).thenReturn(application);
+
+        // Act
+        approvalService.riskReject(application.getId(), request);
+
+        // Assert
+        assertEquals(ApplicationStatus.RISK_REJECTED, application.getStatus());
+        ArgumentCaptor<ApprovalHistory> captor = ArgumentCaptor.forClass(ApprovalHistory.class);
+        verify(approvalHistoryRepository).save(captor.capture());
+        assertEquals(ApprovalDecision.RISK_REJECT, captor.getValue().getDecision());
+        assertEquals("Document is incomplete", captor.getValue().getNotes());
+    }
+
+    @Test
+    void hoApprove_shouldApproveWhenApplicationIsWaitingForHo() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_HO_APPROVAL);
+        when(loanApplicationService.get(application.getId())).thenReturn(application);
+
+        // Act
+        approvalService.hoApprove(application.getId(), approvalRequest(null, null));
+
+        // Assert
+        assertEquals(ApplicationStatus.HO_APPROVED, application.getStatus());
+    }
+
+    @Test
+    void hoApprove_shouldThrowErrorWhenApplicationIsNotWaitingForHo() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        when(loanApplicationService.get(application.getId())).thenReturn(application);
+
+        // Act and Assert
+        assertThrows(BadRequestException.class,
+                () -> approvalService.hoApprove(application.getId(), approvalRequest(null, null)));
+        verify(approvalHistoryRepository, never()).save(any(ApprovalHistory.class));
+    }
+
+    @Test
+    void approvalHistory_shouldSaveBusinessCorrelationId() {
+        // Arrange
+        LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        when(loanApplicationService.get(application.getId())).thenReturn(application);
+
+        // Act
+        approvalService.riskApprove(application.getId(), approvalRequest(null, null));
+
+        // Assert
         ArgumentCaptor<ApprovalHistory> captor = ArgumentCaptor.forClass(ApprovalHistory.class);
         verify(approvalHistoryRepository).save(captor.capture());
         assertEquals(application.getCustomer().getId().toString(), captor.getValue().getCorrelationId());
     }
 
-    private LoanApplication application(ApplicationStatus status) {
+    private LoanApplication loanApplication(ApplicationStatus status) {
         Customer customer = new Customer();
         customer.setId(UUID.randomUUID());
+
         LoanApplication application = new LoanApplication();
         application.setId(UUID.randomUUID());
         application.setCustomer(customer);
@@ -127,4 +184,12 @@ class ApprovalServiceTest {
         application.setRequestedAmount(new BigDecimal("25000000.00"));
         return application;
     }
+
+    private ApprovalRequest approvalRequest(BigDecimal approvedAmount, String notes) {
+        ApprovalRequest request = new ApprovalRequest();
+        request.setApprovedAmount(approvedAmount);
+        request.setNotes(notes);
+        return request;
+    }
+
 }

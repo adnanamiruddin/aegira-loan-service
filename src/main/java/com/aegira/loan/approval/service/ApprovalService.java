@@ -47,8 +47,12 @@ public class ApprovalService {
                     : ApplicationStatus.HO_APPROVED;
             application.setStatus(next);
             createHistory(application, ApprovalDecision.RISK_APPROVE, approvedAmount, emptyToDash(safeRequest.getNotes()));
+            
             audit(application, "RISK_APPROVE", old, next, safeRequest.getNotes());
+            
+        
             log.info("event_name=loan_application_approved resource_id={} approved_amount={} next_status={}", id, approvedAmount, next);
+            
             return loanApplicationService.toResponse(application);
         } finally {
             MDC.remove("business_correlation_id");

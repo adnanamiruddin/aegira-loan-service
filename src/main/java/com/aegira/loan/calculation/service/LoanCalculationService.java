@@ -29,7 +29,7 @@ public class LoanCalculationService {
         log.info("loan calculation completed applicationId={} projectedDsr={} eligible={}",
                 application.getId(), calculation.getProjectedDsr(), calculation.getEligible());
         
-        log.warn("hai");
+        // log.warn("hai");
         return loanCalculationRepository.save(calculation);
     }
 
