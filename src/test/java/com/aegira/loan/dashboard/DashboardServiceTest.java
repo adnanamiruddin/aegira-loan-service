@@ -8,19 +8,27 @@ import com.aegira.loan.loanapplication.repository.LoanApplicationRepository;
 import com.aegira.loan.user.entity.Role;
 import com.aegira.loan.user.entity.User;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
+    @Mock
+    private LoanApplicationRepository repository;
+    @Mock
+    private SecurityUtil securityUtil;
+    @InjectMocks
+    private DashboardService service;
+
     @Test
     void dashboardSummaryReturnsCorrectCounts() {
-        LoanApplicationRepository repository = mock(LoanApplicationRepository.class);
-        SecurityUtil securityUtil = mock(SecurityUtil.class);
-        DashboardService service = new DashboardService(repository, securityUtil);
         User agent = new User();
         agent.setId(UUID.randomUUID());
         agent.setRole(Role.AGENT);

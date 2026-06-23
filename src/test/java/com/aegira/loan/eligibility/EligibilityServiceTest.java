@@ -11,8 +11,11 @@ import com.aegira.loan.loanapplication.entity.RiskLevel;
 import com.aegira.loan.loanapplication.provider.LoanDataProvider;
 import com.aegira.loan.loanapplication.provider.LoanDataProviderResolver;
 import com.aegira.loan.loanproduct.entity.LoanProduct;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,43 +24,43 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class EligibilityServiceTest {
+    @Mock
     private LoanDataProviderResolver loanDataProviderResolver;
+    @Mock
     private LoanDataProvider loanDataProvider;
+    @Mock
+    private EligibilityResultRepository eligibilityResultRepository;
+    @InjectMocks
     private EligibilityService service;
-
-    @BeforeEach
-    void setUp() {
-        loanDataProviderResolver = mock(LoanDataProviderResolver.class);
-        loanDataProvider = mock(LoanDataProvider.class);
-        service = new EligibilityService(mock(EligibilityResultRepository.class), loanDataProviderResolver);
-        when(loanDataProviderResolver.resolve()).thenReturn(loanDataProvider);
-        when(loanDataProvider.hasActiveApplication(org.mockito.ArgumentMatchers.any(UUID.class))).thenReturn(false);
-    }
 
     @Test
     void passAllRules() {
+        givenCustomerHasNoActiveApplication();
         List<EligibilityResult> results = service.evaluate(application(new BigDecimal("5000000.00"), 12, new BigDecimal("5000000.00"), 30), calculation("35.0000"));
         assertTrue(results.stream().allMatch(EligibilityResult::getPassed));
     }
 
     @Test
     void failMinimumIncome() {
+        givenCustomerHasNoActiveApplication();
         List<EligibilityResult> results = service.evaluate(application(new BigDecimal("5000000.00"), 12, new BigDecimal("2000000.00"), 30), calculation("35.0000"));
         assertFailed(results, EligibilityRule.MINIMUM_INCOME);
     }
 
     @Test
     void failDsrLimit() {
+        givenCustomerHasNoActiveApplication();
         List<EligibilityResult> results = service.evaluate(application(new BigDecimal("5000000.00"), 12, new BigDecimal("5000000.00"), 30), calculation("45.0000"));
         assertFailed(results, EligibilityRule.DSR_LIMIT);
     }
 
     @Test
     void failAgeRule() {
+        givenCustomerHasNoActiveApplication();
         List<EligibilityResult> results = service.evaluate(application(new BigDecimal("5000000.00"), 12, new BigDecimal("5000000.00"), 20), calculation("35.0000"));
         assertFailed(results, EligibilityRule.MINIMUM_AGE);
     }
@@ -79,6 +82,11 @@ class EligibilityServiceTest {
 
     private void assertFailed(List<EligibilityResult> results, EligibilityRule rule) {
         assertTrue(results.stream().anyMatch(result -> result.getRuleName() == rule && !result.getPassed()));
+    }
+
+    private void givenCustomerHasNoActiveApplication() {
+        when(loanDataProviderResolver.resolve()).thenReturn(loanDataProvider);
+        when(loanDataProvider.hasActiveApplication(org.mockito.ArgumentMatchers.any(UUID.class))).thenReturn(false);
     }
 
     private LoanApplication application(BigDecimal amount, int tenure, BigDecimal income, int age) {

@@ -4,17 +4,25 @@ import com.aegira.loan.audit.entity.AuditLog;
 import com.aegira.loan.audit.repository.AuditLogRepository;
 import com.aegira.loan.audit.service.AuditService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class PiiRedactionUtilTest {
+    @Mock
+    private AuditLogRepository repository;
+    @InjectMocks
+    private AuditService auditService;
     @Test
     void shouldMaskEmail() {
         assertEquals("bu***@mail.com", PiiRedactionUtil.sanitize("budi@mail.com"));
@@ -38,11 +46,9 @@ class PiiRedactionUtilTest {
 
     @Test
     void shouldSanitizeAuditLogNotes() {
-        AuditLogRepository repository = mock(AuditLogRepository.class);
         when(repository.save(any(AuditLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        AuditService service = new AuditService(repository);
 
-        service.log("LOAN_APPLICATION", UUID.randomUUID(), "UPDATE", null, "3173000000000001", "budi@mail.com",
+        auditService.log("LOAN_APPLICATION", UUID.randomUUID(), "UPDATE", null, "3173000000000001", "budi@mail.com",
                 "phone=08123456789 password=secret", "business-correlation");
 
         ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);

@@ -16,7 +16,11 @@ import com.aegira.loan.user.entity.Role;
 import com.aegira.loan.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -24,37 +28,29 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class ApprovalServiceTest {
+    @Mock
     private LoanApplicationService loanApplicationService;
+    @Mock
     private ApprovalHistoryRepository approvalHistoryRepository;
+    @Mock
     private AuditService auditService;
+    @Mock
     private SecurityUtil securityUtil;
+    @InjectMocks
     private ApprovalService approvalService;
     private User riskUser;
 
     @BeforeEach
     void setUp() {
-        // Buat mock untuk semua dependency ApprovalService.
-        loanApplicationService = mock(LoanApplicationService.class);
-        approvalHistoryRepository = mock(ApprovalHistoryRepository.class);
-        auditService = mock(AuditService.class);
-        securityUtil = mock(SecurityUtil.class);
-        approvalService = new ApprovalService(
-                loanApplicationService,
-                approvalHistoryRepository,
-                auditService,
-                securityUtil
-        );
-
         riskUser = new User();
         riskUser.setId(UUID.randomUUID());
         riskUser.setRole(Role.RISK);
-        when(securityUtil.currentUser()).thenReturn(riskUser);
     }
 
     @Test
@@ -62,6 +58,7 @@ class ApprovalServiceTest {
         // Arrange
         LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
         ApprovalRequest request = approvalRequest(new BigDecimal("50000000.00"), null);
+        givenRiskUser();
         when(loanApplicationService.get(application.getId())).thenReturn(application);
 
         // Act
@@ -69,15 +66,20 @@ class ApprovalServiceTest {
 
         // Assert
         assertEquals(ApplicationStatus.HO_APPROVED, application.getStatus());
+
         verify(approvalHistoryRepository).save(any(ApprovalHistory.class));
+
         verify(auditService).log(any(), any(), any(), any(), any(), any(), any(), any());
     }
+
+    
 
     @Test
     void riskApprove_shouldWaitForHoWhenAmountIsAboveThreshold() {
         // Arrange
         LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
         ApprovalRequest request = approvalRequest(new BigDecimal("50000000.01"), null);
+        givenRiskUser();
         when(loanApplicationService.get(application.getId())).thenReturn(application);
 
         // Act
@@ -91,6 +93,7 @@ class ApprovalServiceTest {
     void riskApprove_shouldUseRequestedAmountWhenApprovedAmountIsEmpty() {
         // Arrange
         LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        givenRiskUser();
         when(loanApplicationService.get(application.getId())).thenReturn(application);
 
         // Act
@@ -120,6 +123,7 @@ class ApprovalServiceTest {
         // Arrange
         LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
         ApprovalRequest request = approvalRequest(null, "Document is incomplete");
+        givenRiskUser();
         when(loanApplicationService.get(application.getId())).thenReturn(application);
 
         // Act
@@ -137,6 +141,7 @@ class ApprovalServiceTest {
     void hoApprove_shouldApproveWhenApplicationIsWaitingForHo() {
         // Arrange
         LoanApplication application = loanApplication(ApplicationStatus.WAITING_HO_APPROVAL);
+        givenRiskUser();
         when(loanApplicationService.get(application.getId())).thenReturn(application);
 
         // Act
@@ -162,6 +167,7 @@ class ApprovalServiceTest {
     void approvalHistory_shouldSaveBusinessCorrelationId() {
         // Arrange
         LoanApplication application = loanApplication(ApplicationStatus.WAITING_RISK_REVIEW);
+        givenRiskUser();
         when(loanApplicationService.get(application.getId())).thenReturn(application);
 
         // Act
@@ -190,6 +196,10 @@ class ApprovalServiceTest {
         request.setApprovedAmount(approvedAmount);
         request.setNotes(notes);
         return request;
+    }
+
+    private void givenRiskUser() {
+        when(securityUtil.currentUser()).thenReturn(riskUser);
     }
 
 }

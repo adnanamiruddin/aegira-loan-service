@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 @Slf4j
 public class AuthService {
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
@@ -47,6 +48,7 @@ public class AuthService {
 
 
         User user = userOpt.get();
+        
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             log.warn("event_name=auth_login_failed user_id={} role={} error_code=BAD_REQUEST", user.getId(), user.getRole());
             throw new BadRequestException("Invalid credentials");

@@ -26,6 +26,10 @@ import com.aegira.loan.user.entity.Role;
 import com.aegira.loan.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -35,37 +39,31 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class LoanApplicationUiServiceTest {
+    @Mock
     private LoanApplicationRepository applicationRepository;
+    @Mock
+    private LoanDataProviderResolver loanDataProviderResolver;
+    @Mock
+    private LoanCalculationService loanCalculationService;
+    @Mock
     private LoanCalculationRepository calculationRepository;
+    @Mock
+    private EligibilityService eligibilityService;
+    @Mock
     private EligibilityResultRepository eligibilityRepository;
+    @Mock
     private ApprovalHistoryRepository approvalHistoryRepository;
+    @Mock
     private SecurityUtil securityUtil;
+    @Mock
+    private AuditService auditService;
+    @InjectMocks
     private LoanApplicationService service;
-
-    @BeforeEach
-    void setUp() {
-        applicationRepository = mock(LoanApplicationRepository.class);
-        calculationRepository = mock(LoanCalculationRepository.class);
-        eligibilityRepository = mock(EligibilityResultRepository.class);
-        approvalHistoryRepository = mock(ApprovalHistoryRepository.class);
-        securityUtil = mock(SecurityUtil.class);
-        service = new LoanApplicationService(
-                applicationRepository,
-                mock(LoanDataProviderResolver.class),
-                securityUtil,
-                mock(LoanCalculationService.class),
-                calculationRepository,
-                mock(EligibilityService.class),
-                eligibilityRepository,
-                approvalHistoryRepository,
-                mock(AuditService.class)
-        );
-    }
 
     @Test
     void applicationDetailReturnsAggregateData() {

@@ -8,16 +8,23 @@ import com.aegira.loan.customer.entity.Customer;
 import com.aegira.loan.loanapplication.entity.LoanApplication;
 import com.aegira.loan.loanproduct.entity.LoanProduct;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
 
+@ExtendWith(MockitoExtension.class)
 class LoanCalculationServiceTest {
-    private final LoanCalculationService service = new LoanCalculationService(mock(LoanCalculationRepository.class));
+    @Mock
+    private LoanCalculationRepository loanCalculationRepository;
+    @InjectMocks
+    private LoanCalculationService service;
 
     @Test
     void calculateTotalInterest() {
